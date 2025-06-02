@@ -178,7 +178,6 @@ class Configurator:
                 "is_split_bycat": False,
             }
             for s in self.samples
-            if self.samples_metadata[s]["isMC"]
         }
         ## Defining the available weight strings
         ## If the users hasn't passed a list of WeightWrapper classes, the configurator
@@ -193,10 +192,10 @@ class Configurator:
         
         # The list of strings is taken from the names of the list of weights classes
         # passed to the configurator.
-        self.available_weights = []
+        self.available_weights = {}
         self.requested_weights = []
         for w in self.weights_classes:
-            self.available_weights.append(w.name)
+            self.available_weights[w.name] = w
          
         self.load_weights_config(self.weights_cfg)
         # keeping a unique list of requested weight to load
@@ -372,8 +371,11 @@ class Configurator:
                 raise Exception("Wrong weight configuration")
             self.requested_weights.append(w)
             # do now check if the weights is not string but custom
-            for wsample in self.weights_config.values():
+            for sample, wsample in self.weights_config.items():
                 # add the weight to all the categories and samples
+                if not self.samples_metadata[sample]["isMC"] and self.available_weights[w].isMC_only:
+                    # Do not add in the data weights configuration if the weight is MC only
+                    continue
                 wsample["inclusive"].append(w)
 
         if "bycategory" in wcfg["common"]:
@@ -383,7 +385,10 @@ class Configurator:
                         print(f"Weight {w} not available in the configuration. Did you add it in the weights_classes?")
                         raise Exception("Wrong weight configuration")
                     self.requested_weights.append(w)
-                    for wsample in self.weights_config.values():
+                    for  sample, wsample in self.weights_config.items():
+                        if not self.samples_metadata[sample]["isMC"] and self.available_weights[w].isMC_only:
+                            # Do not add in the data weights configuration if the weight is MC only
+                            continue
                         wsample["is_split_bycat"] = True
                         # looping on all the samples for this category
                         if w in wsample["inclusive"]:
@@ -407,6 +412,10 @@ class Configurator:
                         if w not in self.available_weights:
                             print(f"Weight {w} not available in the configuration. Did you add it in the weights_classes?")
                             raise Exception("Wrong weight configuration")
+                        
+                        if not self.samples_metadata[sample]["isMC"] and self.available_weights[w].isMC_only:
+                            # Do not add in the data weights configuration if the weight is MC only
+                            continue
                         self.requested_weights.append(w)
                         # append only to the specific sample
                         self.weights_config[sample]["inclusive"].append(w)
@@ -422,9 +431,24 @@ class Configurator:
                                     f"""Error! Trying to include weight {w}
                                 by category, but it is already included inclusively!"""
                                 )
+                            if not self.samples_metadata[sample]["isMC"] and self.available_weights[w].isMC_only:
+                                # Do not add in the data weights configuration if the weight is MC only
+                                continue
                             self.requested_weights.append(w)
                             self.weights_config[sample]["bycategory"][cat].append(w)
                             self.weights_config[sample]["is_split_bycat"] = True
+
+                if "inclusive" not in s_wcfg and "bycategory" not in s_wcfg:
+                    print(f"None of the `inclusive` or `bycategory` keys found in the weights configuration for sample {sample}.\n")
+                    print(
+                        """The dictionary structure should be like:\n
+                        'bysample': {
+                            'sample_name': {
+                                'inclusive': ['weight1', 'weight2'],
+                                'bycategory': {'cat1': ['weight1', 'weight2']}
+                        }\n"""
+                    )
+                    raise Exception("Wrong weight configuration")
 
     def load_variations_config(self, wcfg, variation_type):
         '''This function loads the variations definition and prepares a list of
@@ -446,6 +470,7 @@ class Configurator:
         for w in wcfg["common"]["inclusive"]:
             if w not in available_variations:
                 print(f"Variation {w} not available in the workflow")
+                print("Available variations: ", available_variations)
                 raise Exception(f"Wrong variation configuration: variation {w} not available in the workflow")
             for sample, wsample in self.variations_config.items():
                 if variation_type == "weights" and w not in self.weights_config[sample]["inclusive"]:
@@ -509,6 +534,18 @@ class Configurator:
                             self.variations_config[sample][variation_type][cat].append(
                                 w
                             )
+
+                if "inclusive" not in s_wcfg and "bycategory" not in s_wcfg:
+                    print(f"None of the `inclusive` or `bycategory` keys found in the weights configuration for sample {sample}.\n")
+                    print(
+                        """The dictionary structure should be like:\n
+                        'bysample': {
+                            'sample_name': {
+                                'inclusive': ['weight1', 'weight2'],
+                                'bycategory': {'cat1': ['weight1', 'weight2']}
+                        }\n"""
+                    )
+                    raise Exception("Wrong weight configuration")
 
     def load_columns_config(self, wcfg):
         if wcfg == None:

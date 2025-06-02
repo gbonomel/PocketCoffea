@@ -19,7 +19,7 @@ from dask_jobqueue import HTCondorCluster
 
 class ParslCondorExecutorFactory(ExecutorFactoryABC):
     '''
-    Parsl executor based on condor for RWTH
+    Parsl executor based on condor for RWTH LX cluster
     '''
     def __init__(self, run_options, outputdir, **kwargs):
         self.outputdir = outputdir
@@ -56,8 +56,6 @@ class ParslCondorExecutorFactory(ExecutorFactoryABC):
 
 
     def setup(self):
-        print("All run_options:", self.run_options)
-        
         ''' Start Condor cluster here'''
         self.setup_proxyfile()
 
@@ -72,7 +70,7 @@ class ParslCondorExecutorFactory(ExecutorFactoryABC):
                         provider=CondorProvider(
                             nodes_per_block=1,
                             cores_per_slot=self.run_options.get("cores-per-worker", 1),
-                            mem_per_slot=self.run_options.get("mem_per_worker", 2),
+                            mem_per_slot=self.run_options.get("mem-per-worker", 4),
                             init_blocks=self.run_options["scaleout"],
                             max_blocks=(self.run_options["scaleout"]) + 5,
                             worker_init="\n".join(self.get_worker_env()),
@@ -89,7 +87,7 @@ class ParslCondorExecutorFactory(ExecutorFactoryABC):
             )
 
         self.condor_cluster = parsl.load(condor_htex)
-        print('Ready to run with parsl')
+        print('Ready to run with parsl.')
 
     def get(self):
         return coffea_processor.parsl_executor(**self.customized_args())
@@ -107,7 +105,7 @@ class ParslCondorExecutorFactory(ExecutorFactoryABC):
         
 class DaskExecutorFactory(ExecutorFactoryABC):
     '''
-    Attempt to setup DASK at RWTH LX cluster via HTCondor
+    DASK at RWTH LX cluster via HTCondor
     '''
 
     def __init__(self, run_options, outputdir, **kwargs):
@@ -160,7 +158,7 @@ class DaskExecutorFactory(ExecutorFactoryABC):
             memory = self.run_options['mem-per-worker'],
             disk = self.run_options.get('disk-per-worker', "2GB"),
             job_script_prologue = self.get_worker_env(),
-            log_directory = os.path.join(self.outputdir, "dask_log"),
+            log_directory = "/tmp/"+getpass.getuser()+"/dask_log",
         )
         print(self.get_worker_env())
 
@@ -168,7 +166,7 @@ class DaskExecutorFactory(ExecutorFactoryABC):
         print(">> Sending out jobs")
         self.dask_cluster.adapt(minimum=1 if self.run_options["adaptive"]
                                 else self.run_options['scaleout'],
-                      maximum=self.run_options['scaleout'])
+                                maximum=self.run_options['scaleout'])
         
         self.dask_client = Client(self.dask_cluster)
         print(">> Waiting for the first job to start...")
@@ -202,9 +200,9 @@ def get_executor_factory(executor_name, **kwargs):
         return IterativeExecutorFactory(**kwargs)
     elif executor_name == "futures":
         return FuturesExecutorFactory(**kwargs)
-    elif  executor_name == "parsl-condor":
+    elif  executor_name == "parsl":
         return ParslCondorExecutorFactory(**kwargs)
     elif  executor_name == "dask":
         return DaskExecutorFactory(**kwargs)
     else:
-        print("The executor is not recognized!\n available executors are: iterative, futures, parsl-condor, dask")
+        print("The executor is not recognized!\n available executors are: iterative, futures, parsl, dask")

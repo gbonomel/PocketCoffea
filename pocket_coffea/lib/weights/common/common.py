@@ -5,6 +5,7 @@ import awkward as ak
 from pocket_coffea.lib.scale_factors import (
     sf_ele_reco,
     sf_ele_id,
+    sf_photon,
     sf_mu,
     sf_btag,
     sf_btag_calib,
@@ -13,6 +14,8 @@ from pocket_coffea.lib.scale_factors import (
     sf_jet_puId,
     sf_L1prefiring,
     sf_pileup_reweight,
+    sf_partonshower_isr,
+    sf_partonshower_fsr
 )
 
 
@@ -99,7 +102,36 @@ SF_L1prefiring = WeightLambda.wrap_func(
     has_variations=True
     )
 
-        
+
+SF_PSWeight_isr = WeightLambda.wrap_func(
+    name="sf_partonshower_isr",
+    function=lambda params, metadata, events, size, shape_variations:
+        sf_partonshower_isr(events),
+    has_variations=True
+    )
+
+SF_PSWeight_fsr = WeightLambda.wrap_func(
+    name="sf_partonshower_fsr",
+    function=lambda params, metadata, events, size, shape_variations:
+        sf_partonshower_fsr(events),
+    has_variations=True
+    )
+
+
+SF_pho_pxseed = WeightLambda.wrap_func(
+    name="sf_pho_pxseed",
+    function=lambda params, metadata, events, size, shape_variations:
+        sf_photon(params, events, metadata["year"], 'pxseed'),
+    has_variations=True
+    )
+
+SF_pho_id = WeightLambda.wrap_func(
+    name="sf_pho_id",
+    function=lambda params, metadata, events, size, shape_variations:
+        sf_photon(params, events, metadata["year"], 'id'),
+    has_variations=True
+    )
+
 ########################################
 # Btag scale factors have weights depending on the shape_variation
 
@@ -287,6 +319,8 @@ common_weights = [
     pileup,
     SF_ele_reco,
     SF_ele_id,
+    SF_pho_pxseed,
+    SF_pho_id,
     SF_mu_id,
     SF_mu_iso,
     SF_mu_trigger,
@@ -295,6 +329,8 @@ common_weights = [
     SF_ctag,
     SF_ctag_calib,
     SF_jet_puId,
+    SF_PSWeight_isr,
+    SF_PSWeight_fsr
 ]
 
 

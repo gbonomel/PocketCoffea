@@ -39,7 +39,6 @@ def get_rucio_client(proxy=None) -> Client:
         print("Wrong Rucio configuration, impossible to create client")
         raise e
 
-
    
 def get_xrootd_sites_map():
     """
@@ -48,14 +47,17 @@ def get_xrootd_sites_map():
 
     This function returns the list of xrootd prefix rules for each site.
     """
+
     sites_xrootd_access = defaultdict(dict)
     # Check if the cache file has been modified in the last 10 minutes
     cache_valid = False
     if os.path.exists(".sites_map.json"):
         file_time = os.path.getmtime(".sites_map.json")
         current_time = time.time()
-        ten_minutes_ago = current_time - 600
-        if file_time > ten_minutes_ago:
+        #ten_minutes_ago = current_time - 600
+        twenty_minutes_ago = current_time - 1200
+        sixty_minutes_ago = current_time - 3600
+        if file_time > sixty_minutes_ago:
             cache_valid = True
 
     lock = Lock()
@@ -204,7 +206,9 @@ def get_dataset_files_replicas(
             possible_sites = list(rses.keys())
             if blocklist_sites:
                 possible_sites = list(
-                    filter(lambda key: key not in blocklist_sites, possible_sites)
+                    filter(lambda key: (
+                        (key not in blocklist_sites) and (key.replace("_Disk","") not in blocklist_sites)
+                        ),  possible_sites)
                 )
 
             if len(possible_sites) == 0 and not partial_allowed and not include_redirector:
