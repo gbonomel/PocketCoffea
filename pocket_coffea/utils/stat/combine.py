@@ -215,9 +215,21 @@ class Datacard:
 
     def rate(self, process: str, systematic="nominal") -> float:
         """Rate of a process in the datacard"""
-        # TODO: fix histograms (e.g. negative bins)!
+        # Sum only non-negative bin contents so rates match exported shapes
+        hist_slice = self.histogram[process, systematic, :]
+        try:
+            view = hist_slice.view()
+            values = view["value"]
+        except Exception:
+            # fallback to values() which may return plain array
+            try:
+                values = hist_slice.values()
+            except Exception:
+                return float(0.0)
 
-        return self.histogram[process, systematic, :].sum()["value"]
+        # ignore negative bins (treat them as zero)
+        values = np.where(values < 0, 0.0, values)
+        return float(values.sum())
 
     @property
     def imax(self):
@@ -571,6 +583,11 @@ class Datacard:
                     )
                     new_histogram_view = new_histogram.view()
                     new_histogram_view[:] = histogram[process_name_byyear, :].view()
+                    # Clip negative bins to match rate calculation
+                    negative_mask = new_histogram_view["value"] < 0
+                    if np.any(negative_mask):
+                        new_histogram_view["value"][negative_mask] = 0.0
+                        new_histogram_view["variance"][negative_mask] = 0.0
                     new_histograms[f"{process_name_byyear}_nominal"] = new_histogram
                 else:
                     process_name_byyear = f"{process.name}_{year}"
@@ -583,6 +600,11 @@ class Datacard:
                     new_histogram_view[:] = histogram[
                         process_name_byyear, "nominal", :
                     ].view()
+                    # Clip negative bins to match rate calculation
+                    negative_mask = new_histogram_view["value"] < 0
+                    if np.any(negative_mask):
+                        new_histogram_view["value"][negative_mask] = 0.0
+                        new_histogram_view["variance"][negative_mask] = 0.0
                     shape_name = f"{process_name_byyear}_nominal"
                     new_histograms[shape_name] = new_histogram
                     # Save shape variations
@@ -607,6 +629,11 @@ class Datacard:
                                 new_histogram_view[:] = histogram[
                                     process_name_byyear, variation, :
                                 ].view()
+                                # Clip negative bins to match rate calculation
+                                negative_mask = new_histogram_view["value"] < 0
+                                if np.any(negative_mask):
+                                    new_histogram_view["value"][negative_mask] = 0.0
+                                    new_histogram_view["variance"][negative_mask] = 0.0
                                 # shape-only: strip the normalization absorbed by the
                                 # rateParam, keeping shape and inter-region migration
                                 if (
