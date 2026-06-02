@@ -1,6 +1,7 @@
 """Datacard Class and Utilities for CMS Combine Tool"""
 
 import os
+import warnings
 from functools import cached_property
 
 import hist
@@ -196,9 +197,21 @@ class Datacard:
 
     def rate(self, process: str, systematic="nominal") -> float:
         """Rate of a process in the datacard"""
-        # TODO: fix histograms (e.g. negative bins)!
+        # Sum only non-negative bin contents so rates match exported shapes
+        hist_slice = self.histogram[process, systematic, :]
+        try:
+            view = hist_slice.view()
+            values = view["value"]
+        except Exception:
+            # fallback to values() which may return plain array
+            try:
+                values = hist_slice.values()
+            except Exception:
+                return float(0.0)
 
-        return self.histogram[process, systematic, :].sum()["value"]
+        # ignore negative bins (treat them as zero)
+        values = np.where(values < 0, 0.0, values)
+        return float(values.sum())
 
     @property
     def imax(self):
@@ -475,6 +488,13 @@ class Datacard:
             histogram = self.histogram
             processes = self.mc_processes
         new_histograms = dict()
+
+        def _hist_integral(h: hist.Hist) -> float:
+            try:
+                return float(h.sum()["value"])
+            except Exception:
+                return float(h.sum())
+
         for process in processes.values():
             for year in process.years:
                 if is_data:
@@ -486,6 +506,14 @@ class Datacard:
                     )
                     new_histogram_view = new_histogram.view()
                     new_histogram_view[:] = histogram[process_name_byyear, :].view()
+                    negative_bins = new_histogram_view["value"] < 0
+                    if np.any(negative_bins):
+                        warnings.warn(
+                            f"Negative histogram values found for sample `{process_name_byyear}` and variation nominal. "
+                            "Setting them to 0.",
+                            stacklevel=2,
+                        )
+                        new_histogram_view["value"][negative_bins] = 0
                     new_histograms[f"{process_name_byyear}_nominal"] = new_histogram
                 else:
                     process_name_byyear = f"{process.name}_{year}"
@@ -498,6 +526,16 @@ class Datacard:
                     new_histogram_view[:] = histogram[
                         process_name_byyear, "nominal", :
                     ].view()
+        
+                    negative_bins = new_histogram_view["value"] < 0
+                    if np.any(negative_bins):
+                        warnings.warn(
+                            f"Negative histogram values found for sample `{process_name_byyear}` and variation nominal. "
+                            "Setting them to 0.",
+                            stacklevel=2,
+                        )
+                        new_histogram_view["value"][negative_bins] = 0
+
                     shape_name = f"{process_name_byyear}_nominal"
                     new_histograms[shape_name] = new_histogram
                     # Save shape variations
@@ -522,6 +560,28 @@ class Datacard:
                                 new_histogram_view[:] = histogram[
                                     process_name_byyear, variation, :
                                 ].view()
+                                negative_bins = new_histogram_view["value"] < 0
+                                if np.any(negative_bins):
+                                    warnings.warn(
+                                        f"Negative histogram values found for sample `{process_name_byyear}` and variation `{variation}`. "
+                                        "Setting them to 0.",
+                                        stacklevel=2,
+                                    )
+                                    new_histogram_view["value"][negative_bins] = 0
+                                # if the variation histogram has zero integral, replace it with nominal
+                                integral = _hist_integral(new_histogram)
+                                if integral == 0:
+                                    warnings.warn(
+                                        f"Variation `{variation}` for `{process_name_byyear}` has zero integral; replacing with nominal shape.",
+                                        stacklevel=2,
+                                    )
+                                    # prefer already created nominal hist if available
+                                    nominal_hist = new_histograms.get(f"{process_name_byyear}_nominal")
+                                    if nominal_hist is not None:
+                                        new_histogram_view[:] = nominal_hist.view()
+                                    else:
+                                        # fallback to source nominal
+                                        new_histogram_view[:] = histogram[process_name_byyear, "nominal", :].view()
                                 shape_name = f"{process_name_byyear}_{systematic.datacard_name}{shift}"
                                 new_histograms[shape_name] = new_histogram
 
