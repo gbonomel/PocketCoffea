@@ -158,8 +158,7 @@ class Datacard:
         #    self.data_obs = self.rearrange_histograms(is_data=True)
         if self.has_data:
             self.data_obs = self.rearrange_histograms(
-                is_data=True,
-                data_variations=self.data_variations,
+                is_data=True
             )
         self._check_shapes()
 
